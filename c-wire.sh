@@ -9,16 +9,16 @@
 # ---------------------- FONCTIONS --------------------------
 # Afficher l'aide du script
 afficher_aide() {
-    echo "Usage: ./c-wire.sh [chemin_fichier_csv] [type_station] [type_conso] [id_centrale (optionnel)] [-h]"
+    echo "Usage: ./c-wire.sh [chemin_fichier_dat] [type_station] [type_conso] [id_centrale (optionnel)] [-h]"
     echo "\nOptions :"
-    echo "  chemin_fichier_csv   Chemin du fichier d'entrée (.csv) contenant les données"
+    echo "  chemin_fichier_dat   Chemin du fichier d'entrée (.dat) contenant les données"
     echo "  type_station         Type de station à analyser (hvb, hva, lv)"
     echo "  type_conso           Type de consommateur (comp, indiv, all)"
     echo "  id_centrale          (Optionnel) Filtre par identifiant de centrale"
     echo "  -h                   Affiche cette aide et ignore les autres paramètres"
     echo "\nExemples :"
-    echo "  ./c-wire.sh input/data.csv hvb comp"
-    echo "  ./c-wire.sh input/data.csv lv all 2"
+    echo "  ./c-wire.sh input/c-wire_v00.dat hvb comp"
+    echo "  ./c-wire.sh input/c-wire_v00.dat lv all 2"
     exit 0
 }
 
