@@ -1,131 +1,94 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
-// Structure pour un nœud AVL
-typedef struct AVLNode {
-    char station_id[20];
-    int capacity;
-    int consumption;
-    int height;
-    struct AVLNode *left, *right;
-} AVLNode;
+// Définir la taille maximale des chaînes de caractères
+#define MAX_LINE_LENGTH 1024
 
-// Fonction pour créer un nouveau nœud
-AVLNode* createNode(char* id, int capacity, int consumption) {
-    AVLNode* node = (AVLNode*)malloc(sizeof(AVLNode));
-    strcpy(node->station_id, id);
-    node->capacity = capacity;
-    node->consumption = consumption;
-    node->height = 1;
-    node->left = node->right = NULL;
-    return node;
-}
+// Structure pour stocker une station d'énergie
+typedef struct {
+    char id[50];
+    char type_station[10];
+    char type_conso[10];
+    // D'autres champs peuvent être ajoutés selon les besoins
+} Station;
 
-// Fonction pour calculer la hauteur d'un nœud
-int height(AVLNode* node) {
-    if (!node) return 0;
-    return node->height;
-}
-
-// Fonction pour effectuer une rotation à droite
-AVLNode* rotateRight(AVLNode* y) {
-    AVLNode* x = y->left;
-    AVLNode* T = x->right;
-    x->right = y;
-    y->left = T;
-    y->height = 1 + (height(y->left) > height(y->right) ? height(y->left) : height(y->right));
-    x->height = 1 + (height(x->left) > height(x->right) ? height(x->left) : height(x->right));
-    return x;
-}
-
-// Fonction pour effectuer une rotation à gauche
-AVLNode* rotateLeft(AVLNode* x) {
-    AVLNode* y = x->right;
-    AVLNode* T = y->left;
-    y->left = x;
-    x->right = T;
-    x->height = 1 + (height(x->left) > height(x->right) ? height(x->left) : height(x->right));
-    y->height = 1 + (height(y->left) > height(y->right) ? height(y->left) : height(y->right));
-    return y;
-}
-
-// Fonction pour calculer l'équilibre
-double getBalance(AVLNode* node) {
-    if (!node) return 0;
-    return height(node->left) - height(node->right);
-}
-
-// Fonction pour insérer dans l'AVL
-AVLNode* insert(AVLNode* node, char* id, int capacity, int consumption) {
-    if (!node) return createNode(id, capacity, consumption);
-    // Comparaison pour insertion
-    if (strcmp(id, node->station_id) < 0)
-        node->left = insert(node->left, id, capacity, consumption);
-    else if (strcmp(id, node->station_id) > 0)
-        node->right = insert(node->right, id, capacity, consumption);
-    else {
-        node->consumption += consumption;
-        return node;
+// Fonction pour lire les données depuis un fichier et les stocker dans un tableau dynamique
+Station* lire_donnees(const char *chemin_fichier, int *nombre_stations) {
+    FILE *fichier = fopen(chemin_fichier, "r");
+    if (!fichier) {
+        perror("Erreur d'ouverture du fichier");
+        exit(EXIT_FAILURE);
     }
 
-    // Mise à jour de la hauteur
-    node->height = 1 + (height(node->left) > height(node->right) ? height(node->left) : height(node->right));
-
-    // Ré-équilibrage
-    double balance = getBalance(node);
-
-    // Cas d'équilibrage
-    if (balance > 1 && strcmp(id, node->left->station_id) < 0)
-        return rotateRight(node);
-    if (balance < -1 && strcmp(id, node->right->station_id) > 0)
-        return rotateLeft(node);
-    if (balance > 1 && strcmp(id, node->left->station_id) > 0) {
-        node->left = rotateLeft(node->left);
-        return rotateRight(node);
-    }
-    if (balance < -1 && strcmp(id, node->right->station_id) < 0) {
-        node->right = rotateRight(node->right);
-        return rotateLeft(node);
+    // Calculer le nombre de stations (ici simplifié à la lecture)
+    int capacity = 10; // Capacité initiale
+    *nombre_stations = 0;
+    Station *stations = malloc(capacity * sizeof(Station));
+    if (!stations) {
+        perror("Erreur d'allocation mémoire");
+        exit(EXIT_FAILURE);
     }
 
-    return node;
+    char ligne[MAX_LINE_LENGTH];
+    while (fgets(ligne, sizeof(ligne), fichier)) {
+        // Lecture des données de chaque ligne (ici, on suppose un format fixe)
+        if (*nombre_stations >= capacity) {
+            capacity *= 2; // Double la capacité pour éviter un dépassement
+            stations = realloc(stations, capacity * sizeof(Station));
+            if (!stations) {
+                perror("Erreur de réallocation mémoire");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        // Par exemple, ici nous analysons chaque ligne pour extraire les champs
+        sscanf(ligne, "%49s %9s %9s", stations[*nombre_stations].id, stations[*nombre_stations].type_station, stations[*nombre_stations].type_conso);
+        (*nombre_stations)++;
+    }
+
+    fclose(fichier);
+    return stations;
 }
 
-// Fonction pour écrire l'AVL dans un fichier
-void writeInFile(AVLNode* node, FILE* file) {
-    if (node) {
-        writeInFile(node->left, file);
-        fprintf(file, "%s:%d:%d\n", node->station_id, node->capacity, node->consumption);
-        writeInFile(node->right, file);
+// Fonction pour écrire les résultats dans un fichier CSV
+void ecrire_resultats(const char *chemin_fichier, Station *stations, int nombre_stations) {
+    FILE *fichier = fopen(chemin_fichier, "w");
+    if (!fichier) {
+        perror("Erreur d'ouverture du fichier de sortie");
+        exit(EXIT_FAILURE);
     }
+
+    // Écrire les entêtes du CSV
+    fprintf(fichier, "ID,Type Station,Type Conso\n");
+
+    // Écrire les données
+    for (int i = 0; i < nombre_stations; i++) {
+        fprintf(fichier, "%s,%s,%s\n", stations[i].id, stations[i].type_station, stations[i].type_conso);
+    }
+
+    fclose(fichier);
 }
 
-int main(int argc, char* argv[]) {
+// Fonction principale
+int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <input_file> <output_file>\n", argv[0]);
-        return 1;
-    }
-    
-    FILE *input = fopen(argv[1], "r");
-    FILE *output = fopen(argv[2], "w");
-    if (!input || !output) {
-        fprintf(stderr, "Error opening files\n");
-        return 2;
+        fprintf(stderr, "Usage: %s <chemin_fichier_input> <chemin_fichier_output>\n", argv[0]);
+        return EXIT_FAILURE;
     }
 
-    char line[256], id[20];
-    int capacity, consumption;
-    AVLNode* root = NULL;
+    const char *chemin_fichier_input = argv[1];
+    const char *chemin_fichier_output = argv[2];
 
-    while (fgets(line, sizeof(line), input)) {
-        sscanf(line, "%[^:]:%d:%d", id, &capacity, &consumption);
-        root = insert(root, id, capacity, consumption);
-    }
+    // Lire les données depuis le fichier d'entrée
+    int nombre_stations = 0;
+    Station *stations = lire_donnees(chemin_fichier_input, &nombre_stations);
 
-    writeInFile(root, output);
-    fclose(input);
-    fclose(output);
-    return 0;
+    // Écrire les résultats dans un fichier CSV
+    ecrire_resultats(chemin_fichier_output, stations, nombre_stations);
+
+    // Libérer la mémoire allouée
+    free(stations);
+
+    return EXIT_SUCCESS;
 }
