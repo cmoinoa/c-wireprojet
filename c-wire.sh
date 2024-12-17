@@ -63,7 +63,11 @@ fi
 mkdir -p tmp graphs tests input/codeC
 if [ -d tmp ]; then
     rm -rf tmp/*
+else
+    echo "Erreur : le répertoire tmp n'a pas pu être créé."
+    exit 1
 fi
+
 
 # Vérification de l'exécutable C
 EXECUTABLE="codeC/analyse_stations"
@@ -80,7 +84,7 @@ fi
 # Filtrage des données (préparation temporaire)
 FICHIER_TMP="tmp/${TYPE_STATION}_${TYPE_CONSO}.tmp"
 echo "Filtrage des données pour $TYPE_STATION avec $TYPE_CONSO..."
-awk -F":" 'NR == 1 || ($2 == "'$TYPE_STATION'" && $3 == "'$TYPE_CONSO'")' "$CHEMIN_FICHIER" > "$FICHIER_TMP"
+awk -F":" -v type_station="$TYPE_STATION" -v type_conso="$TYPE_CONSO" 'NR == 1 || ($2 == type_station && $3 == type_conso)' "$CHEMIN_FICHIER" > "$FICHIER_TMP"
 
 # Exécution du programme C
 echo "Exécution du programme C..."
