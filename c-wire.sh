@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Script c-wire.sh : analyse des stations d'energie
+# Auteur : [Votre Nom]
+# Date : [Date]
+# Description : Ce script shell traite un fichier CSV volumineux, compile et exécute un programme C pour
+#               analyser des stations HVB, HVA, et LV et générer des fichiers de sortie structurés.
+
+# ---------------------- FONCTIONS --------------------------
 # Afficher l'aide du script
 afficher_aide() {
     echo "Usage: ./c-wire.sh [chemin_fichier_dat] [type_station] [type_conso] [id_centrale (optionnel)] [-h]"
@@ -21,11 +28,14 @@ erreur() {
     exit 1
 }
 
-# Vérification des paramètres d'entrée
+# ------------------- VERIFICATION DES PARAMETRES ------------------
+
+# Paramètre d'aide prioritaire
 if [[ "$1" == "-h" ]]; then
     afficher_aide
 fi
 
+# Validation des paramètres obligatoires
 if [ $# -lt 3 ]; then
     erreur "Nombre de paramètres insuffisant."
 fi
@@ -42,52 +52,62 @@ fi
 if [[ "$TYPE_CONSO" != "comp" && "$TYPE_CONSO" != "indiv" && "$TYPE_CONSO" != "all" ]]; then
     erreur "Type de consommateur invalide."
 fi
+if { [[ "$TYPE_STATION" == "hvb" || "$TYPE_STATION" == "hva" ]] && [[ "$TYPE_CONSO" != "comp" ]]; }; then
+    erreur "Seuls les consommateurs 'comp' sont autorisés pour HVB et HVA."
+fi
 
-# Vérification des dossiers
-mkdir -p tmp tests
+# -------------------- PREPARATION ENVIRONNEMENT ------------------
+
+# Vérification des dossiers et nettoyage
+mkdir -p tmp graphs tests input/codeC
 if [ -d tmp ]; then
     rm -rf tmp/*
-else
-    erreur "Le répertoire tmp n'existe pas ou n'a pas pu être créé."
+fi
+
+# Vérification du fichier d'entrée
+if [ ! -f "$CHEMIN_FICHIER" ]; then
+    erreur "Le fichier d'entrée spécifié n'existe pas."
 fi
 
 # Vérification de l'exécutable C
 EXECUTABLE="input/codeC/analyse_stations"
 if [ ! -f "$EXECUTABLE" ]; then
-    erreur "L'exécutable C n'a pas été trouvé. Assurez-vous qu'il a été compilé."
+    echo "Compilation de l'exécutable C..."
+    (cd input/codeC && make)
+    if [ $? -ne 0 ]; then
+        erreur "Echec de la compilation du programme C."
+    fi
 fi
 
-# Fonction de génération CSV
-generer_csv() {
-    local type_station="$1"
-    local type_conso="$2"
-    local fichier_tmp="tmp/${type_station}_${type_conso}.tmp"
-    local resultat="tests/${type_station}_${type_conso}.csv"
+# ---------------------- TRAITEMENT PRINCIPAL ----------------------
 
-    echo "Filtrage des données pour $type_station avec $type_conso..."
-    awk -F":" -v type_station="$type_station" -v type_conso="$type_conso" \
-    'NR == 1 || ($2 == type_station && $3 == type_conso)' "$CHEMIN_FICHIER" > "$fichier_tmp"
-    
-    if [ ! -s "$fichier_tmp" ]; then
-        erreur "Le fichier temporaire $fichier_tmp est vide ou n'a pas pu être créé."
-    fi
+# Filtrage des données (préparation temporaire)
+FICHIER_TMP="tmp/${TYPE_STATION}_${TYPE_CONSO}.tmp"
+echo "Filtrage des données pour $TYPE_STATION avec $TYPE_CONSO..."
+awk -F":" 'NR == 1 || ($2 == "'$TYPE_STATION'" && $3 == "'$TYPE_CONSO'")' "$CHEMIN_FICHIER" > "$FICHIER_TMP"
 
-    echo "Exécution du programme C pour $type_station avec $type_conso..."
-    $EXECUTABLE "$fichier_tmp" "$resultat"
-    
-    if [ $? -ne 0 ]; then
-        erreur "Erreur lors de l'exécution du programme C."
-    fi
+# Vérification que le fichier temporaire n'est pas vide
+if [ ! -s "$FICHIER_TMP" ]; then
+    erreur "Le fichier temporaire est vide ou invalide après le filtrage."
+fi
 
-    echo "Fichier généré : $resultat"
-}
+# Afficher le contenu du fichier temporaire pour le débogage
+echo "Contenu du fichier temporaire (avant exécution du programme C) :"
+cat "$FICHIER_TMP"
 
-# Appels pour générer les fichiers CSV pour chaque combinaison
-generer_csv "hvb" "comp"
-generer_csv "hva" "comp"
-generer_csv "lv" "comp"
-generer_csv "lv" "indiv"
-generer_csv "lv" "all"
-generer_csv "lv" "all_minmax"
+# Exécution du programme C
+echo "Exécution du programme C..."
+RESULTAT="tests/${TYPE_STATION}_${TYPE_CONSO}.csv"
+$EXECUTABLE "$FICHIER_TMP" "$RESULTAT"
 
-echo "Tous les fichiers ont été générés."
+# Vérification si le programme C a réussi à générer le fichier
+if [ $? -ne 0 ]; then
+    erreur "Echec de l'exécution du programme C."
+fi
+
+# Vérifier si le fichier résultat a été créé
+if [ ! -f "$RESULTAT" ]; then
+    erreur "Le fichier de résultats ($RESULTAT) n'a pas été créé."
+fi
+
+echo "Traitement terminé. Les résultats sont disponibles dans $RESULTAT."
