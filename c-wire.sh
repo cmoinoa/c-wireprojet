@@ -1,113 +1,107 @@
 #!/bin/bash
 
-# Script c-wire.sh : analyse des stations d'energie
-# Auteur : [Votre Nom]
-# Date : [Date]
-# Description : Ce script shell traite un fichier CSV volumineux, compile et exécute un programme C pour
-#               analyser des stations HVB, HVA, et LV et générer des fichiers de sortie structurés.
-
-# ---------------------- FONCTIONS --------------------------
-# Afficher l'aide du script
-afficher_aide() {
-    echo "Usage: ./c-wire.sh [chemin_fichier_dat] [type_station] [type_conso] [id_centrale (optionnel)] [-h]"
-    echo "\nOptions :"
-    echo "  chemin_fichier_dat   Chemin du fichier d'entrée (.dat) contenant les données"
-    echo "  type_station         Type de station à analyser (hvb, hva, lv)"
-    echo "  type_conso           Type de consommateur (comp, indiv, all)"
-    echo "  id_centrale          (Optionnel) Filtre par identifiant de centrale"
-    echo "  -h                   Affiche cette aide et ignore les autres paramètres"
-    echo "\nExemples :"
-    echo "  ./c-wire.sh input/c-wire_v00.dat hvb comp"
-    echo "  ./c-wire.sh input/c-wire_v00.dat lv all 2"
-    exit 0
-}
-
-# Fonction pour afficher un message d'erreur
-erreur() {
-    echo "Erreur: $1"
+# Fonction d'aide
+function afficher_aide {
+    echo "Usage : ./c-wire.sh <chemin_du_fichier> <type_station> <type_consommateur> [id_centrale]"
+    echo ""
+    echo "type_station : hvb (HV-B), hva (HV-A), lv (Low Voltage)"
+    echo "type_consommateur :"
+    echo "  - comp (entreprises) pour hvb, hva, ou lv"
+    echo "  - indiv (particuliers) pour lv uniquement"
+    echo "  - all (tous) pour lv uniquement"
+    echo "id_centrale : optionnel, identifiant de la centrale spécifique (entier)"
     exit 1
 }
 
-# ------------------- VERIFICATION DES PARAMETRES ------------------
-
-# Paramètre d'aide prioritaire
+# Vérification si l'option d'aide est demandée
 if [[ "$1" == "-h" ]]; then
     afficher_aide
 fi
 
-# Validation des paramètres obligatoires
+# Vérification de la présence de tous les paramètres obligatoires
 if [ $# -lt 3 ]; then
-    erreur "Nombre de paramètres insuffisant."
+    echo "Erreur : Trop peu de paramètres."
+    afficher_aide
 fi
 
-CHEMIN_FICHIER="$1"
-TYPE_STATION="$2"
-TYPE_CONSO="$3"
-ID_CENTRALE="$4"
+# Paramètres
+fichier_donnees="$1"
+type_station="$2"
+type_consommateur="$3"
+id_centrale=$4
 
-# Validation du type de station et des consommateurs
-if [[ "$TYPE_STATION" != "hvb" && "$TYPE_STATION" != "hva" && "$TYPE_STATION" != "lv" ]]; then
-    erreur "Type de station invalide."
-fi
-if [[ "$TYPE_CONSO" != "comp" && "$TYPE_CONSO" != "indiv" && "$TYPE_CONSO" != "all" ]]; then
-    erreur "Type de consommateur invalide."
-fi
-if { [[ "$TYPE_STATION" == "hvb" || "$TYPE_STATION" == "hva" ]] && [[ "$TYPE_CONSO" != "comp" ]]; }; then
-    erreur "Seuls les consommateurs 'comp' sont autorisés pour HVB et HVA."
+# Vérification des combinaisons autorisées
+if [[ "$type_station" == "hvb" && "$type_consommateur" != "comp" ]] || 
+   [[ "$type_station" == "hva" && "$type_consommateur" != "comp" ]] || 
+   [[ "$type_station" == "lv" && "$type_consommateur" != "comp" && "$type_consommateur" != "indiv" && "$type_consommateur" != "all" ]] || 
+   [[ "$type_station" != "lv" && "$type_consommateur" == "indiv" ]] || 
+   [[ "$type_station" != "lv" && "$type_consommateur" == "all" ]]; then
+    echo "Erreur : Combinaison type_station et type_consommateur invalide."
+    afficher_aide
 fi
 
-# -------------------- PREPARATION ENVIRONNEMENT ------------------
+# Vérification de l'existence du fichier d'entrée
+if [ ! -f "$fichier_donnees" ]; then
+    echo "Erreur : Le fichier '$fichier_donnees' n'existe pas."
+    exit 1
+fi
 
-# Vérification des dossiers et nettoyage
-mkdir -p tmp graphs tests input/codeC
-if [ -d tmp ]; then
+# Création des dossiers tmp et graphs si nécessaire
+if [ ! -d "tmp" ]; then
+    mkdir tmp
+else
     rm -rf tmp/*
 fi
 
-# Vérification du fichier d'entrée
-if [ ! -f "$CHEMIN_FICHIER" ]; then
-    erreur "Le fichier d'entrée spécifié n'existe pas."
+if [ ! -d "graphs" ]; then
+    mkdir graphs
 fi
 
-# Vérification de l'exécutable C
-EXECUTABLE="input/codeC/analyse_stations"
-if [ ! -f "$EXECUTABLE" ]; then
-    echo "Compilation de l'exécutable C..."
-    (cd input/codeC && make)
+# Compilation du programme C si nécessaire
+if [ ! -f "c-wire" ]; then
+    echo "Le programme C n'existe pas. Compilation en cours..."
+    make
     if [ $? -ne 0 ]; then
-        erreur "Echec de la compilation du programme C."
+        echo "Erreur : La compilation a échoué."
+        exit 1
     fi
 fi
 
-# ---------------------- TRAITEMENT PRINCIPAL ----------------------
+# Exécution du programme C pour générer le fichier de sortie
+output_file="tmp/${type_station}_${type_consommateur}.csv"
 
-# Filtrage des données (préparation temporaire)
-FICHIER_TMP="tmp/${TYPE_STATION}_${TYPE_CONSO}.tmp"
-echo "Filtrage des données pour $TYPE_STATION avec $TYPE_CONSO..."
-awk -F":" 'NR == 1 || ($2 == "'$TYPE_STATION'" && $3 == "'$TYPE_CONSO'")' "$CHEMIN_FICHIER" > "$FICHIER_TMP"
+# Lancer le programme C avec les paramètres et rediriger la sortie vers le fichier
+start_time=$(date +%s)
 
-# Vérification que le fichier temporaire n'est pas vide
-if [ ! -s "$FICHIER_TMP" ]; then
-    erreur "Le fichier temporaire est vide ou invalide après le filtrage."
+./c-wire "$fichier_donnees" "$type_station" "$type_consommateur" "$id_centrale" > "$output_file"
+
+end_time=$(date +%s)
+execution_time=$((end_time - start_time))
+
+# Affichage du temps d'exécution
+echo "Le traitement a pris $execution_time secondes."
+
+# Vérification si le fichier a été créé
+if [ ! -f "$output_file" ]; then
+    echo "Erreur : Le fichier de sortie '$output_file' n'a pas été créé."
+    exit 1
 fi
 
-# Afficher le contenu du fichier temporaire pour le débogage
-echo "Contenu du fichier temporaire (avant exécution du programme C) :"
-cat "$FICHIER_TMP"
+echo "Fichier de sortie généré : $output_file"
 
-# Exécution du programme C
-echo "Exécution du programme C..."
-RESULTAT="tests/${TYPE_STATION}_${TYPE_CONSO}.csv"
-$EXECUTABLE "$FICHIER_TMP" "$RESULTAT"
+# Si l'option "lv all" est choisie, créer le fichier lv_all_minmax.csv
+if [[ "$type_station" == "lv" && "$type_consommateur" == "all" ]]; then
+    echo "Traitement des 10 postes LV avec la consommation la plus faible et la plus élevée..."
 
-# Vérification si le programme C a réussi à générer le fichier
-if [ $? -ne 0 ]; then
-    erreur "Echec de l'exécution du programme C."
+    # Appel du programme C pour générer le fichier lv_all_minmax.csv
+    ./c-wire "$fichier_donnees" "lv" "all_minmax" "$id_centrale"
+
+    # Vérification si le fichier a été créé
+    lv_minmax_file="tmp/lv_all_minmax.csv"
+    if [ ! -f "$lv_minmax_file" ]; then
+        echo "Erreur : Le fichier 'lv_all_minmax.csv' n'a pas été généré."
+        exit 1
+    fi
+
+    echo "Fichier de sortie minmax généré : $lv_minmax_file"
 fi
-
-# Vérifier si le fichier résultat a été créé
-if [ ! -f "$RESULTAT" ]; then
-    erreur "Le fichier de résultats ($RESULTAT) n'a pas été créé."
-fi
-
-echo "Traitement terminé. Les résultats sont disponibles dans $RESULTAT."
